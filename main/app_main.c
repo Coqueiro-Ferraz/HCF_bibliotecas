@@ -27,9 +27,15 @@
 #include "HCF_MP.h"   // Vai se tornar HCF_MP
 // Incluir HCF_IOT HCF_BT HCF_DHT HCF_ULTRA HCF_RFID HCF_ZMPT HCF_ACS HCF_SERVO HCF_OLED HCF_CAM HCF_SD HCF_LORA
 
+#include "HCF_ULTRA.h"
+
+#define TRIG_PIN 18  // Defina o pino TRIG
+#define ECHO_PIN 19  // Defina o pino ECHO
 
 // Área das macros
 //-----------------------------------------------------------------------------------------------------------------------
+//static const char *TAG = "HC-SR04";
+
 
 #define IN(x) (entradas>>x)&1
 
@@ -62,6 +68,10 @@ void app_main(void)
     // inicializar os IOs e teclado da placa
     iniciar_iotec();      
     entradas = io_le_escreve(saidas); // Limpa as saídas e lê o estado das entradas
+
+
+    iniciar_ultrassonico(TRIG_PIN,ECHO_PIN);  // Inicializa o sensor
+
 
     // inicializar o display LCD 
     iniciar_lcd();
@@ -110,7 +120,10 @@ void app_main(void)
         escreve_lcd(2,14,escrever);
 
         
-        
+        float distancia = medir_distancia();  // Obtém a distância
+        ESP_LOGI(TAG, "Distância: %.2f cm", distancia);  // Imprime a distância
+        vTaskDelay(pdMS_TO_TICKS(1000));  // Aguarda 1 segundo antes de repetir
+
         //-  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  - -  -  -  -  -  -  -  -  -  -  Escreva seu só até aqui!!! //
         //________________________________________________________________________________________________________________________________________________________//
         vTaskDelay(10 / portTICK_PERIOD_MS);    // delay mínimo obrigatório, se retirar, pode causar reset do ESP
