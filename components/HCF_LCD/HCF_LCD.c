@@ -14,6 +14,8 @@
 //#endif
 #define portTICK_RATE_MS portTICK_PERIOD_MS
 
+static const char *TAG = "HCF_LCD";
+
 uint8_t dado_atual;
 
 void Enviar_lcd595(uint8_t dado)

@@ -32,6 +32,8 @@
 
 #define portTICK_RATE_MS portTICK_PERIOD_MS
 
+static const char *TAG = "HCF_IOTEC";
+
 char le_teclado ()
 {        
     int i,j;

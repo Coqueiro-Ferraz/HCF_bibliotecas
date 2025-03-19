@@ -25,16 +25,19 @@
 #include "HCF_LCD.h" // Vai se tornar HCF_LCD
 #include "HCF_ADC.h"   // Vai se tornar HCF_ADC
 #include "HCF_MP.h"   // Vai se tornar HCF_MP
-// Incluir HCF_IOT HCF_BT HCF_DHT HCF_ULTRA HCF_RFID HCF_ZMPT HCF_ACS HCF_SERVO HCF_OLED HCF_CAM HCF_SD HCF_LORA
+// Incluir HCF_IOT HCF_BT HCF_DHT HCF_ULTRA HCF_RFID HCF_ZMPT HCF_ACS HCF_SERVO HCF_OLED HCF_CAM HCF_SD HCF_LORA HCF_DIGITAL
 
 #include "HCF_ULTRA.h"
+#include "HCF_DHT.h"
+
 
 #define TRIG_PIN 18  // Defina o pino TRIG
 #define ECHO_PIN 19  // Defina o pino ECHO
+#define DHT_PIN 4 //Defina o pino de dados o DHT
 
 // Área das macros
 //-----------------------------------------------------------------------------------------------------------------------
-//static const char *TAG = "HC-SR04";
+
 
 
 #define IN(x) (entradas>>x)&1
@@ -49,6 +52,24 @@ char escrever[40];
 
 // Funções e ramos auxiliares
 //-----------------------------------------------------------------------------------------------------------------------
+
+
+// Função principal (task)
+void DHT_task(void *pvParameter) {
+    iniciar_DHT(DHT_PIN);  // Inicializa o sensor
+
+    float temperatura = 0.0, umidade = 0.0;
+    
+    while (1) {
+        if (DHT_temp_umidade(&temperatura, &umidade)) {
+            ESP_LOGI(TAG,"Temperatura: %.1f°C, Umidade: %.1f%%", temperatura, umidade);
+        } else {
+            ESP_LOGW(TAG,"Falha na leitura do sensor DHT22");
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Aguarda 2 segundos entre leituras
+    }
+}
 
 
 // Programa Principal
@@ -89,7 +110,7 @@ void app_main(void)
     limpar_lcd();
 
     /////////////////////////////////////////////////////////////////////////////////////   Periféricos inicializados
-
+    xTaskCreate(&DHT_task, "DHT_task", 2048, NULL, 5, NULL); 
  
 
     /////////////////////////////////////////////////////////////////////////////////////   Início do ramo principal                    

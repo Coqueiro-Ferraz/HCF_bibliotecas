@@ -22,7 +22,7 @@
 
 #define FI (1<<FC_INI)
 #define FF (1<<FC_FIN)
-static const char *TAG = "MP_HCF";
+static const char *TAG = "HCF_MP";
 int FC_FIN, FC_INI; 
 uint8_t outputs;
 
