@@ -19,6 +19,7 @@
 // Área de inclusão das bibliotecas
 //-----------------------------------------------------------------------------------------------------------------------
 #include <stdio.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -31,7 +32,8 @@
 
 #include "HCF_ULTRA.h"
 #include "HCF_DHT.h"
-
+#include "driver/gpio.h"
+#include "HCF_WNOLOGY.h"
 
 #define TRIG_PIN 19  // Defina o pino TRIG
 #define ECHO_PIN 21  // Defina o pino ECHO
@@ -40,16 +42,23 @@
 // Área das macros
 //-----------------------------------------------------------------------------------------------------------------------
 
+#define WIFI_SSID "coqueiro"
+#define WIFI_PASS "amigos12"
 
+#define DEVICE_ID "65774aa82623fd911ab650c1"
+#define ACCESS_TOKEN "seu_token_de_acesso"
+#define W_ACCESS_KEY "76ac5ed2-ed18-4e96-9e02-d2dd572db083" //use a chave de acesso e a senha
+#define W_PASSWORD "f52797619b7205bc2ac8d796d80fd0cb23f988e882cd0b82d575b26939f78c1c"
+#define MQTT_URI "mqtt://broker.app.wnology.io:1883" //"mqtts://broker.losant.com"  // broker Wegnology usa esse endereço
 
 #define IN(x) (entradas>>x)&1
 
 // Área de declaração de variáveis e protótipos de funções
 //-----------------------------------------------------------------------------------------------------------------------
 
-static const char *TAG = "Placa";
-static uint8_t entradas, saidas = 0; //variáveis de controle de entradas e saídas
-static char tecla = '-' ;
+char *TAG = "Placa";
+uint8_t entradas, saidas = 0; //variáveis de controle de entradas e saídas
+char tecla = '-' ;
 char escrever[40];
 bool direcao = false;
 int angulo = 0;
@@ -57,6 +66,20 @@ float temperatura = 0.0, umidade = 0.0;
 
 // Funções e ramos auxiliares
 //-----------------------------------------------------------------------------------------------------------------------
+void recebido(const char *key, const char *value) {
+    //ESP_LOGI("CALLBACK", "Comando recebido: key = %s, value = %s", key, value);
+
+    if (strcmp(key, "LED") == 0) {
+        if (strcmp(value, "true") == 0) {
+            // Ligar LED
+            gpio_set_level(GPIO_NUM_2, 1);
+        } else if (strcmp(value, "false") == 0) {
+            // Desligar LED
+            gpio_set_level(GPIO_NUM_2, 0);
+        }
+    }
+}
+
 
 
 
@@ -97,13 +120,25 @@ void app_main(void)
     //iniciar_DHT(DHT_PIN);  // Inicializa o sensor
     //delay inicial
     vTaskDelay(1000 / portTICK_PERIOD_MS); 
+
+    //mqtt_wegnology_auto_configure(DEVICE_ID, W_ACCESS_KEY, W_PASSWORD);
+    mqtt_wegnology_start(WIFI_SSID, WIFI_PASS, MQTT_URI, DEVICE_ID, W_ACCESS_KEY, W_PASSWORD);
+    mqtt_wegnology_register_callback(recebido);
+
     limpar_lcd();
 
 
     /////////////////////////////////////////////////////////////////////////////////////   Periféricos inicializados
    // xTaskCreate(&DHT_task, "DHT_task", 2048, NULL, 3, NULL); 
 
-
+    while (1) {
+        float temperatura = 25.0 + (rand() % 100) / 10.0f;  // valor simulado
+        mqtt_wegnology_send_float("Temperatura", temperatura);
+        
+        printf("Temperatura enviada: %.2f\n", temperatura);
+        ESP_LOGI(TAG, "Temperatura enviada: %.2f", temperatura);
+        vTaskDelay(pdMS_TO_TICKS(5000));  // publica a cada 5s
+    }
     /////////////////////////////////////////////////////////////////////////////////////   Início do ramo principal                    
     while (1)                                                                                                                         
     {                                                                                                                                 
