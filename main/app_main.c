@@ -24,11 +24,33 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-#include "HCF_IOTEC.h"   // Vai se tornar HCF_IOTEC
-#include "HCF_LCD.h" // Vai se tornar HCF_LCD
-#include "HCF_ADC.h"   // Vai se tornar HCF_ADC
-#include "HCF_MP.h"   // Vai se tornar HCF_MP
-// Incluir HCF_IOT HCF_BT HCF_DHT HCF_ULTRA HCF_RFID HCF_ZMPT HCF_ACS HCF_SERVO HCF_OLED HCF_CAM HCF_SD HCF_LORA HCF_DIGITAL
+#include "HCF_IOTEC.h"
+#include "HCF_LCD.h"
+#include "HCF_ADC.h"
+#include "HCF_MP.h" 
+//status de desenvolvimento
+// #include HCF_WNOLOGY     -     Testes
+// #include HCF_BT          -     Já tenho a base (ÁPICE)
+// #include HCF_DHT          -     Testes
+// #include HCF_ULTRA      -     Testes
+// #include HCF_RFID        - Vide chat
+// #include HCF_ZMPT         - Vide chat
+// #include HCF_ACS            - Vide chat
+// #include HCF_SERVO         - Base (ÁPICE)
+// #include HCF_OLED
+// #include HCF_CAM         - ARDUINO IDE
+// #include HCF_SD 
+// #include HCF_SOFT        - Testes
+// #include HCF_LORA     - ARDUINO IDE
+// #include HCF_DIGITAL    - Vide chat
+// #include HCF_RTC 
+// #include HCF_NTP         - Vide chat
+// #include HCF_OTA 
+// #include HCF_VIBRA         - Em desenvolvimento
+// #include HCF_PLACA         - Ideia de integrar a IOTEC, LCD e MP
+// #include HCF_DIMER 
+// #include HCF_MODBUS 
+// #include HCF_WIFI         - Testes
 
 #include "HCF_ULTRA.h"
 #include "HCF_DHT.h"
