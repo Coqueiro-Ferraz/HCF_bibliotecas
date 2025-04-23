@@ -1,3 +1,6 @@
+// Ainda em desenvolvimento
+
+
 #include "HCF_WNOLOGY.h"
 //#include <stdio.h>
 #include "HCF_WIFI.h"
@@ -13,6 +16,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "esp_sntp.h"
+#include "time.h"
+#include "sys/time.h"
 
 /*
 Exemplo de configuração
@@ -26,6 +32,8 @@ Exemplo de configuração
 #define PASSWORD "amigos12"
 */
 
+
+#define MQTT_URI "mqtt://broker.app.wnology.io:1883"
 static const char *TAG = "HCF_WNOLOGY";
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
@@ -46,6 +54,41 @@ typedef struct {
     float value;
 } mqtt_message_t;
 
+//callback interno
+
+/*typedef void (*wegnology_value_handler_t)(const char *value);
+
+typedef struct {
+    const char *key;
+    wegnology_value_handler_t handler;
+} wegnology_handler_entry_t;*/
+
+#define MAX_HANDLERS 10
+static wegnology_handler_entry_t handler_table[MAX_HANDLERS];
+static int handler_count = 0;
+
+void wegnology_register_key_handler(const char *key, wegnology_value_handler_t handler) {
+    if (handler_count < MAX_HANDLERS) {
+        handler_table[handler_count].key = key;
+        handler_table[handler_count].handler = handler;
+        handler_count++;
+    }
+}
+
+static void internal_callback(const char *key, const char *value) {
+    for (int i = 0; i < handler_count; i++) {
+        if (strcmp(handler_table[i].key, key) == 0) {
+            handler_table[i].handler(value);
+            return;
+        }
+    }
+    ESP_LOGW("WNOLOGY", "Chave não reconhecida: %s", key);
+}
+
+
+
+
+
 // Callback do evento MQTT
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     esp_mqtt_event_handle_t event = event_data;
@@ -58,44 +101,27 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
  
             break;
 
-        /*case MQTT_EVENT_DATA:
-            ESP_LOGI(TAG, "MQTT_EVENT_DATA RECEIVED");
-            printf("TOPIC=%.*s\n", event->topic_len, event->topic);
-            printf("DATA=%.*s\n", event->data_len, event->data);
-            break;*/
         case MQTT_EVENT_DATA:
             cJSON *json = cJSON_ParseWithLength(event->data, event->data_len);
+
             if (json) {
-                cJSON *item = json->child;
-                while (item) {
-                    if (user_callback) user_callback(item->string, item->valuestring);
-                    item = item->next;
+                cJSON *payload = cJSON_GetObjectItem(json, "payload");
+
+                if (payload && cJSON_IsObject(payload)) {
+                    cJSON *item = payload->child;
+                    while (item) {
+                        if (user_callback) user_callback(item->string, item->valuestring);
+                        //if()
+                        item = item->next;
+                    }
                 }
                 cJSON_Delete(json);
             }
+
             ESP_LOGI(TAG, "Mensagem recebida:");
             ESP_LOGI(TAG, "TOPIC=%.*s", event->topic_len, event->topic);
             ESP_LOGI(TAG, "DATA=%.*s", event->data_len, event->data);
     
-    /*// Aqui você chama a função de callback definida pelo usuário
-    if (internal_rx_callback) {
-        char topic[event->topic_len + 1];
-        char data[event->data_len + 1];
-        memcpy(topic, event->topic, event->topic_len);
-        topic[event->topic_len] = '\0';
-        memcpy(data, event->data, event->data_len);
-        data[event->data_len] = '\0';
-        internal_rx_callback(topic, data);
-    }*/
-
-
-
-
-
-
-
-
-
             break;
         case MQTT_EVENT_DISCONNECTED:
             mqtt_connected = false;
@@ -123,7 +149,15 @@ static void mqtt_publish_task(void *param) {
             cJSON_AddItemToObject(root, "data", data);
 
             // Adiciona timestamp automático (poderia vir de um RTC ou NTP futuramente) ou receber da própria wegnology
-            cJSON_AddStringToObject(root, "time", "2025-04-16T00:00:00.000Z");
+            time_t now;
+            struct tm timeinfo;
+            time(&now);
+            localtime_r(&now, &timeinfo);
+
+            char iso_timestamp[30];
+            strftime(iso_timestamp, sizeof(iso_timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+
+            cJSON_AddStringToObject(root, "time", iso_timestamp);
 
             char *json_str = cJSON_PrintUnformatted(root);
             esp_mqtt_client_publish(mqtt_client, publish_topic, json_str, 0, 1, 0);
@@ -134,13 +168,42 @@ static void mqtt_publish_task(void *param) {
     }
 }
 
+void ntp_init(void)
+{
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init();
+
+    // Aguarda sincronização
+    time_t now = 0;
+    struct tm timeinfo = { 0 };
+    int retry = 0;
+    const int retry_count = 10;
+
+    while (timeinfo.tm_year < (2020 - 1900) && ++retry < retry_count) {
+        ESP_LOGI("NTP", "Aguardando sincronização NTP...");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        time(&now);
+        localtime_r(&now, &timeinfo);
+    }
+    // Ajuste para horário de Brasília
+    setenv("TZ", "UTC+3", 1);  // ou use "BRST-3BRDT-2,M10.3.0/0,M2.3.0/0" para horário de verão
+    tzset();
+
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    ESP_LOGI("NTP", "Tempo sincronizado (Brasília): %s", asctime(&timeinfo));
+}
+ 
 // Inicializa Wi-Fi e MQTT
-void mqtt_wegnology_start(const char *ssid, const char *pass, const char *uri, const char *device_id, const char *user_name, const char *access_token) {
+void iniciar_wnology_wifi(const char *ssid, const char *pass, const char *device_id, const char *user_name, const char *access_token) {
 
     nvs_flash_init();
     //tcpip_adapter_init();
     wifi_init();
     wifi_connect_sta(ssid, pass, 10000);
+
+    ntp_init();
 
     snprintf(dev_id, sizeof(dev_id), "%s", device_id);
     snprintf(publish_topic, sizeof(publish_topic), "wnology/%s/state", device_id);
@@ -149,7 +212,7 @@ void mqtt_wegnology_start(const char *ssid, const char *pass, const char *uri, c
     snprintf(mqtt_password, sizeof(mqtt_password), "%s", access_token);
 
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = uri,
+        .broker.address.uri = MQTT_URI,
         .credentials.set_null_client_id = false,  
         .credentials.client_id = dev_id,
         .credentials.username = mqtt_username,
@@ -161,29 +224,10 @@ void mqtt_wegnology_start(const char *ssid, const char *pass, const char *uri, c
 
     mqtt_msg_queue = xQueueCreate(10, sizeof(mqtt_message_t));
     xTaskCreate(mqtt_publish_task, "mqtt_pub_task", 4096, NULL, 5, NULL);
+
+    mqtt_wegnology_register_callback(internal_callback);
 }
 
-
-/*void mqtt_wegnology_start(const char *ssid, const char *pass, const char *uri, const char *dev_id, const char *wkey, const char *wpwd) {
-    nvs_flash_init();
-    //tcpip_adapter_init();
-    wifi_init();
-    wifi_connect_sta(ssid, pass, 10000);
-
-
-    // Configuração e conexão Wi-Fi omitida aqui por brevidade...
-
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = uri,
-        .credentials.set_null_client_id = false,  
-        .credentials.client_id = dev_id,
-        .credentials.username = wkey,
-        .credentials.authentication.password = wpwd,
-    };
-    client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(client);
-}*/
 
 void mqtt_wegnology_send_float(const char *key, float value){
     mqtt_message_t msg;
@@ -191,8 +235,6 @@ void mqtt_wegnology_send_float(const char *key, float value){
     msg.value = value;
     xQueueSend(mqtt_msg_queue, &msg, portMAX_DELAY);
 }
-
-
 
 void mqtt_wegnology_stop() {
     if (mqtt_client) {
@@ -207,14 +249,6 @@ void mqtt_wegnology_set_topics(const char *pub, const char *sub) {
     strncpy(subscribe_topic, sub, sizeof(subscribe_topic));
 }
 
-/*void mqtt_wegnology_publish(const char *key, const char *value) {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, key, value);
-    char *json_str = cJSON_PrintUnformatted(root);
-    esp_mqtt_client_publish(client, publish_topic, json_str, 0, 1, 0);
-    free(json_str);
-    cJSON_Delete(root);
-}*/
 
 // Publica um único par chave/valor
 mqtt_wegnology_status_t mqtt_wegnology_publish(const char *key, const char *value) {
@@ -252,7 +286,14 @@ mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const cha
     if (include_timestamp) {
         time_t now;
         time(&now);
-        cJSON_AddNumberToObject(root, "timestamp", (double)now);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+
+        char timestamp[30];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+
+        cJSON_AddStringToObject(root, "time", timestamp);
+        //cJSON_AddNumberToObject(root, "timestamp", (double)now);
     }
 
     char *json_str = cJSON_PrintUnformatted(root);

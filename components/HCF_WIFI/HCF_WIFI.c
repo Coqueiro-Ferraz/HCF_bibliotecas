@@ -11,6 +11,9 @@
 
 #define TAG "HCF_WIFI"
 
+#define MAX_RETRY 10
+static int retry_count = 0;
+
 esp_netif_t *wifi_netif;
 
 static EventGroupHandle_t wifi_events;
@@ -104,23 +107,30 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
         break;
     case WIFI_EVENT_STA_DISCONNECTED:
     {
-        wifi_event_sta_disconnected_t *wifi_event_sta_disconnected = event_data;
-        // wifi_err_reason_t
-        char *err = get_wifi_err(wifi_event_sta_disconnected->reason);
-        if (wifi_event_sta_disconnected->reason != WIFI_REASON_ASSOC_LEAVE)
-        {
-            ESP_LOGE(TAG, "Desconectado %s", err);
-        }
-        else
-        {
-            ESP_LOGI(TAG, "Desconectado");
+        wifi_event_sta_disconnected_t *disconn = event_data;
+        char *err = get_wifi_err(disconn->reason);
+
+        if (disconn->reason != WIFI_REASON_ASSOC_LEAVE) {
+            ESP_LOGW(TAG, "Desconectado: %s", err);
+        } else {
+            ESP_LOGI(TAG, "Desconectado voluntariamente");
         }
 
         xEventGroupSetBits(wifi_events, DISCONNECTED);
+
+        if (retry_count < MAX_RETRY) {
+            retry_count++;
+            ESP_LOGI(TAG, "Tentando reconectar (%d/%d)...", retry_count, MAX_RETRY);
+            esp_wifi_connect();
+        } else {
+            ESP_LOGE(TAG, "Número máximo de tentativas atingido");
+        }
+
         break;
     }
     case IP_EVENT_STA_GOT_IP:
-        ESP_LOGI(TAG, "IP Obitido");
+        ESP_LOGI(TAG, "IP Obtido com sucesso");
+        retry_count = 0;
         xEventGroupSetBits(wifi_events, CONNECTED_GOT_IP);
         break;
     default:

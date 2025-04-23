@@ -11,8 +11,16 @@ typedef enum {
     MQTT_WEGNOLOGY_ERROR_JSON,
 } mqtt_wegnology_status_t;
 
-// Inicialização do módulo MQTT + Wi-Fi
-void mqtt_wegnology_start(const char *ssid, const char *pass, const char *uri, const char *device_id, const char *user_name, const char *access_token);
+typedef void (*wegnology_value_handler_t)(const char *value);
+
+typedef struct {
+    const char *key;
+    wegnology_value_handler_t handler;
+} wegnology_handler_entry_t;
+
+// Inicialização do módulo MQTT + Wi-Fi -> Broker "mqtt://broker.app.wnology.io:1883"
+//ssid e pass são dados do wifi, user_name e access_token são extraídos do arquivo acces key do wnology e device_id é o endereço do dispositivo no wegnology
+void iniciar_wnology_wifi(const char *ssid, const char *pass, const char *device_id, const char *user_name, const char *access_token);
 
 // Definição dos tópicos de publicação e subscrição
 void mqtt_wegnology_set_topics(const char *publish_topic, const char *subscribe_topic);
@@ -34,5 +42,6 @@ mqtt_wegnology_status_t mqtt_wegnology_publish(const char *key, const char *valu
 
 // Callback customizado para processar dados recebidos via subscrição
 void mqtt_wegnology_register_callback(void (*on_message)(const char *key, const char *value));
+void wegnology_register_key_handler(const char *key, wegnology_value_handler_t handler);
 
 #endif

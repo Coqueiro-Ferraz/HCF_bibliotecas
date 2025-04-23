@@ -29,28 +29,28 @@
 #include "HCF_ADC.h"
 #include "HCF_MP.h" 
 //status de desenvolvimento
-// #include HCF_WNOLOGY     -     Testes
-// #include HCF_BT          -     Já tenho a base (ÁPICE)
-// #include HCF_DHT          -     Testes
-// #include HCF_ULTRA      -     Testes
-// #include HCF_RFID        - Vide chat
-// #include HCF_ZMPT         - Vide chat
-// #include HCF_ACS            - Vide chat
-// #include HCF_SERVO         - Base (ÁPICE)
+// #include HCF_WNOLOGY     //  Testes
+// #include HCF_BT          //  Já tenho a base (ÁPICE)
+// #include HCF_DHT         //  Testes
+// #include HCF_ULTRA       //  Testes
+// #include HCF_RFID        //  Vide chat
+// #include HCF_ZMPT        //  Vide chat
+// #include HCF_ACS         //  Vide chat
+// #include HCF_SERVO       //  Base (ÁPICE)
 // #include HCF_OLED
-// #include HCF_CAM         - ARDUINO IDE
+// #include HCF_CAM         //  ARDUINO IDE
 // #include HCF_SD 
-// #include HCF_SOFT        - Testes
-// #include HCF_LORA     - ARDUINO IDE
-// #include HCF_DIGITAL    - Vide chat
+// #include HCF_SOFT        //  Testes
+// #include HCF_LORA        //  ARDUINO IDE
+// #include HCF_DIGITAL     //  Vide chat
 // #include HCF_RTC 
-// #include HCF_NTP         - Vide chat
+// #include HCF_NTP         //  Vide chat
 // #include HCF_OTA 
-// #include HCF_VIBRA         - Em desenvolvimento
-// #include HCF_PLACA         - Ideia de integrar a IOTEC, LCD e MP
+// #include HCF_VIBRA       //  Em desenvolvimento
+// #include HCF_PLACA       //  Ideia de integrar a IOTEC, LCD e MP
 // #include HCF_DIMER 
 // #include HCF_MODBUS 
-// #include HCF_WIFI         - Testes
+// #include HCF_WIFI        //  Testes
 
 #include "HCF_ULTRA.h"
 #include "HCF_DHT.h"
@@ -68,10 +68,8 @@
 #define WIFI_PASS "amigos12"
 
 #define DEVICE_ID "65774aa82623fd911ab650c1"
-#define ACCESS_TOKEN "seu_token_de_acesso"
 #define W_ACCESS_KEY "76ac5ed2-ed18-4e96-9e02-d2dd572db083" //use a chave de acesso e a senha
 #define W_PASSWORD "f52797619b7205bc2ac8d796d80fd0cb23f988e882cd0b82d575b26939f78c1c"
-#define MQTT_URI "mqtt://broker.app.wnology.io:1883" //"mqtts://broker.losant.com"  // broker Wegnology usa esse endereço
 
 #define IN(x) (entradas>>x)&1
 
@@ -88,21 +86,25 @@ float temperatura = 0.0, umidade = 0.0;
 
 // Funções e ramos auxiliares
 //-----------------------------------------------------------------------------------------------------------------------
-void recebido(const char *key, const char *value) {
-    //ESP_LOGI("CALLBACK", "Comando recebido: key = %s, value = %s", key, value);
-
-    if (strcmp(key, "LED") == 0) {
-        if (strcmp(value, "true") == 0) {
+/*void recebido(const char *key, const char *value) {
+    if (strcmp(key, "LED") == 0) {// LED é o nome do rótulo do envio do wegnology
+        if (strcmp(value, "true") == 0) { //true é o dado que vem ao apertar o botão
             // Ligar LED
             gpio_set_level(GPIO_NUM_2, 1);
-        } else if (strcmp(value, "false") == 0) {
+        } else if (strcmp(value, "false") == 0) { //true é o dado que vem ao apertar o botão
             // Desligar LED
             gpio_set_level(GPIO_NUM_2, 0);
         }
     }
+}*/
+
+void handler_led(const char *value) {
+    if (strcmp(value, "true") == 0) {
+        gpio_set_level(GPIO_NUM_2, 1);
+    } else {
+        gpio_set_level(GPIO_NUM_2, 0);
+    }
 }
-
-
 
 
 
@@ -144,8 +146,9 @@ void app_main(void)
     vTaskDelay(1000 / portTICK_PERIOD_MS); 
 
     //mqtt_wegnology_auto_configure(DEVICE_ID, W_ACCESS_KEY, W_PASSWORD);
-    mqtt_wegnology_start(WIFI_SSID, WIFI_PASS, MQTT_URI, DEVICE_ID, W_ACCESS_KEY, W_PASSWORD);
-    mqtt_wegnology_register_callback(recebido);
+    iniciar_wnology_wifi(WIFI_SSID, WIFI_PASS, DEVICE_ID, W_ACCESS_KEY, W_PASSWORD);
+    wegnology_register_key_handler("LED", handler_led);
+    //mqtt_wegnology_register_callback(recebido);
 
     limpar_lcd();
 
