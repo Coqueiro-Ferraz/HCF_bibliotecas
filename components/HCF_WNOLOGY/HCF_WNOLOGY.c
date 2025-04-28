@@ -187,7 +187,7 @@ void ntp_init(void)
         localtime_r(&now, &timeinfo);
     }
     // Ajuste para horário de Brasília
-    setenv("TZ", "UTC+3", 1);  // ou use "BRST-3BRDT-2,M10.3.0/0,M2.3.0/0" para horário de verão
+    setenv("TZ", "UTC", 1);  // ou use "BRST-3BRDT-2,M10.3.0/0,M2.3.0/0" para horário de verão UTC+3
     tzset();
 
     time(&now);

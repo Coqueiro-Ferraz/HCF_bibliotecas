@@ -59,7 +59,7 @@
 
 #define TRIG_PIN 19  // Defina o pino TRIG
 #define ECHO_PIN 21  // Defina o pino ECHO
-#define DHT_PIN 23 //Defina o pino de dados o DHT
+#define DHT_PIN 23 //Defina o pino de dados o DHT /23
 
 // Área das macros
 //-----------------------------------------------------------------------------------------------------------------------
@@ -127,9 +127,11 @@ void app_main(void)
     entradas = io_le_escreve(saidas); // Limpa as saídas e lê o estado das entradas
 
 
-    iniciar_ultrassonico(TRIG_PIN,ECHO_PIN);  // Inicializa o sensor
+    //iniciar_ultrassonico(TRIG_PIN,ECHO_PIN);  // Inicializa o sensor
 
-    iniciar_MP(1);
+    iniciar_DHT(DHT_PIN);
+
+    // iniciar_MP(1);
     // inicializar o display LCD 
     iniciar_lcd();
     escreve_lcd(1,0,"    Jornada 1   ");
@@ -157,12 +159,21 @@ void app_main(void)
    // xTaskCreate(&DHT_task, "DHT_task", 2048, NULL, 3, NULL); 
 
     while (1) {
-        float temperatura = 25.0 + (rand() % 100) / 10.0f;  // valor simulado
-        mqtt_wegnology_send_float("Temperatura", temperatura);
-        
-        printf("Temperatura enviada: %.2f\n", temperatura);
-        ESP_LOGI(TAG, "Temperatura enviada: %.2f", temperatura);
-        vTaskDelay(pdMS_TO_TICKS(5000));  // publica a cada 5s
+        float temperatura=0, umidade=0;
+        //char buffer[15];
+        if(DHT_temp_umidade(&temperatura, &umidade))
+        {
+            //float temperatura = 25.0 + (rand() % 100) / 10.0f;  // valor simulado
+            mqtt_wegnology_send_float("Temperatura", temperatura);
+            mqtt_wegnology_send_float("Umidade", umidade);
+            printf("Temperatura: %.2f Umidade: %.2f\n", temperatura, umidade);
+            ESP_LOGI(TAG, "Temperatura enviada: %.2f", temperatura);
+        }
+        else
+        {
+            printf("Erro sensor DHT\n");
+        }
+        vTaskDelay(pdMS_TO_TICKS(10000));  // publica a cada 10s
     }
     /////////////////////////////////////////////////////////////////////////////////////   Início do ramo principal                    
     while (1)                                                                                                                         

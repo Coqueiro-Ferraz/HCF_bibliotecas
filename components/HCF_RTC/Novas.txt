@@ -1,3 +1,21 @@
-RTC
-NTP
-Vibra
+RTC - Usando o DS1332 - Alunos
+NTP - Adquirir horário via internet - Ver Wnology / alunos
+Vibra - Usar o sensor de vibração piezoelétrico - Alunos
+NVS - Gravar e resgatar dados da memória - Vide Palazini
+DAC - Usar o DAC
+PLACA - Usar a placa com facilidade
+RMS - Converter leituras do ACS712 e ZMPT101 para valores RMS - alunos
+SERVO - Controlar servomotor - alunos
+OLED - Controlar display OLED
+DIGITAL - Leitura da digital 
+OTA - Fazer o upload do código via over the air
+SEG7 - Controlar display de 7 segmentos - alunos
+BT - alunos 
+DHT - ok
+RFID - alunos
+RS485 - alunos
+ULTRA 
+PWM 
+LoRa
+CAM
+LED RGB - Alunos
