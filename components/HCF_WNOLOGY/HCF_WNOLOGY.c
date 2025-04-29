@@ -272,7 +272,7 @@ mqtt_wegnology_status_t mqtt_wegnology_publish(const char *key, const char *valu
 }
 
 // Publica múltiplos pares chave/valor + timestamp opcional
-mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const char **values, int count, int include_timestamp) {
+/*mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const char **values, int count, int include_timestamp) {
     if (!mqtt_client || !keys || !values || count <= 0) return MQTT_WEGNOLOGY_ERROR_NULL;
     if (!mqtt_connected) return MQTT_WEGNOLOGY_ERROR_NOT_CONNECTED;
 
@@ -294,6 +294,45 @@ mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const cha
 
         cJSON_AddStringToObject(root, "time", timestamp);
         //cJSON_AddNumberToObject(root, "timestamp", (double)now);
+    }
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    mqtt_wegnology_status_t status = MQTT_WEGNOLOGY_OK;
+
+    if (esp_mqtt_client_publish(mqtt_client, publish_topic, json_str, 0, 1, 0) < 0) {
+        status = MQTT_WEGNOLOGY_ERROR_JSON;
+    }
+
+    free(json_str);
+    cJSON_Delete(root);
+    return status;
+}*/
+
+// Publica múltiplos pares chave/valor + timestamp
+mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const char **values, int count, int include_timestamp) {
+    if (!mqtt_client || !keys || !values || count <= 0) return MQTT_WEGNOLOGY_ERROR_NULL;
+    if (!mqtt_connected) return MQTT_WEGNOLOGY_ERROR_NOT_CONNECTED;
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *data = cJSON_CreateObject();
+    if (!root || !data) return MQTT_WEGNOLOGY_ERROR_JSON;
+
+    for (int i = 0; i < count; i++) {
+        cJSON_AddStringToObject(data, keys[i], values[i]);
+    }
+
+    cJSON_AddItemToObject(root, "data", data);
+
+    if (include_timestamp) {
+        time_t now;
+        time(&now);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+
+        char timestamp[30];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+
+        cJSON_AddStringToObject(root, "time", timestamp);
     }
 
     char *json_str = cJSON_PrintUnformatted(root);

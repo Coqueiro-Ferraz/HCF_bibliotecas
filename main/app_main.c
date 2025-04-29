@@ -178,8 +178,19 @@ void app_main(void)
         if(DHT_temp_umidade(&temperatura, &umidade))
         {
             //float temperatura = 25.0 + (rand() % 100) / 10.0f;  // valor simulado
-            mqtt_wegnology_send_float("Temperatura", temperatura);
-            mqtt_wegnology_send_float("Umidade", umidade);
+        //    mqtt_wegnology_send_float("Temperatura", temperatura);
+        //    mqtt_wegnology_send_float("Umidade", umidade);
+
+            char temp_str[16], umid_str[16];
+            snprintf(temp_str, sizeof(temp_str), "%.2f", temperatura);
+            snprintf(umid_str, sizeof(umid_str), "%.2f", umidade);
+
+            const char *keys[] = { "Temperatura", "Umidade" };
+            const char *values[] = { temp_str, umid_str };
+
+            mqtt_wegnology_publish_json(keys, values, 2, 1);
+
+
             printf("Temperatura: %.2f Umidade: %.2f\n", temperatura, umidade);
             ESP_LOGI(TAG, "Temperatura enviada: %.2f", temperatura);
         }
