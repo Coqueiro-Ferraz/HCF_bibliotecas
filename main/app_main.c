@@ -29,28 +29,28 @@
 #include "HCF_ADC.h"
 #include "HCF_MP.h" 
 //status de desenvolvimento
-// #include HCF_WNOLOGY     //  Testes
-// #include HCF_BT          //  Já tenho a base (ÁPICE)
-// #include HCF_DHT         //  Testes
-// #include HCF_ULTRA       //  Testes
-// #include HCF_RFID        //  Vide chat
-// #include HCF_ZMPT        //  Vide chat
-// #include HCF_ACS         //  Vide chat
-// #include HCF_SERVO       //  Base (ÁPICE)
-// #include HCF_OLED
-// #include HCF_CAM         //  ARDUINO IDE
-// #include HCF_SD 
-// #include HCF_SOFT        //  Testes
-// #include HCF_LORA        //  ARDUINO IDE
-// #include HCF_DIGITAL     //  Vide chat
-// #include HCF_RTC 
-// #include HCF_NTP         //  Vide chat
-// #include HCF_OTA 
-// #include HCF_VIBRA       //  Em desenvolvimento
-// #include HCF_PLACA       //  Ideia de integrar a IOTEC, LCD e MP
-// #include HCF_DIMER 
-// #include HCF_MODBUS 
-// #include HCF_WIFI        //  Testes
+// #include "HCF_WNOLOGY.h"     //  Testes
+// #include "HCF_BT.h"          //  Já tenho a base (ÁPICE)
+// #include "HCF_DHT.h"         //  Testes
+// #include "HCF_ULTRA.h"       //  Testes
+// #include "HCF_RFID.h"        //  Vide chat
+// #include "HCF_ZMPT.h"        //  Vide chat
+// #include "HCF_ACS.h"         //  Vide chat
+// #include "HCF_SERVO.h"       //  Base (ÁPICE)
+// #include "HCF_OLED.h"
+// #include "HCF_CAM.h"         //  ARDUINO IDE
+// #include "HCF_SD.h" 
+#include "HCF_SOFT.h"        //  Testes
+// #include "HCF_LORA.h"        //  ARDUINO IDE
+// #include "HCF_DIGITAL.h"     //  Vide chat
+// #include "HCF_RTC.h" 
+// #include "HCF_NTP.h"         //  Vide chat
+// #include "HCF_OTA.h" 
+// #include "HCF_VIBRA.h"       //  Em desenvolvimento
+// #include "HCF_PLACA.h"       //  Ideia de integrar a IOTEC, LCD e MP
+// #include "HCF_DIMER.h" 
+// #include "HCF_MODBUS.h" 
+// #include "HCF_WIFI.h"        //  Testes
 
 #include "HCF_ULTRA.h"
 #include "HCF_DHT.h"
@@ -64,10 +64,24 @@
 // Área das macros
 //-----------------------------------------------------------------------------------------------------------------------
 
+#define ESP 4
+
 #define WIFI_SSID "coqueiro"
 #define WIFI_PASS "amigos12"
 
-#define DEVICE_ID "65774aa82623fd911ab650c1"
+//#define WIFI_SSID "GUEST"
+//#define WIFI_PASS "cade204820"
+
+#if (ESP==1)
+    #define DEVICE_ID "65774aa82623fd911ab650c1" //ESP de testes
+#elif (ESP==2)
+    #define DEVICE_ID "6810f5b23c10b7b2e9e4e6d8" //ESP2
+#elif (ESP==3)
+    #define DEVICE_ID "6811023f30642df2ffeaa490" //ESP3
+#else
+    #define DEVICE_ID "6811025d30642df2ffeaa4da" //ESP4
+#endif
+
 #define W_ACCESS_KEY "76ac5ed2-ed18-4e96-9e02-d2dd572db083" //use a chave de acesso e a senha
 #define W_PASSWORD "f52797619b7205bc2ac8d796d80fd0cb23f988e882cd0b82d575b26939f78c1c"
 
@@ -126,7 +140,7 @@ void app_main(void)
     iniciar_iotec();      
     entradas = io_le_escreve(saidas); // Limpa as saídas e lê o estado das entradas
 
-
+    piscar_LED(3,2,100,100);
     //iniciar_ultrassonico(TRIG_PIN,ECHO_PIN);  // Inicializa o sensor
 
     iniciar_DHT(DHT_PIN);

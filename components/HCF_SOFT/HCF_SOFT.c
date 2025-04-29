@@ -10,7 +10,7 @@
 //#include "esp_system.h"
 static const char *TAG = "HCF_SOFT";
 
-int espera_nivel(int pino, int nivel, uint32_t estouro_us) {
+static int espera_nivel(int pino, int nivel, uint32_t estouro_us) {
     uint32_t tempo_inicial = esp_timer_get_time(); // Pega o tempo atual em microssegundos
     while (gpio_get_level(pino) != nivel) {
         if ((esp_timer_get_time() - tempo_inicial) > estouro_us) {
