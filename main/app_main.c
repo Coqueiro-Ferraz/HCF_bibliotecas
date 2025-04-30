@@ -13,7 +13,8 @@
 *   Existem algumas imagens e outros documentos na pasta Recursos
 *
 *   Autor: Hagaceef
-*
+*  
+* ideias -> fazer a comutação automática da rede e tentativa de conexão a cada hora e envio em batelada, coletando dados mesmo offline
 */
 
 // Área de inclusão das bibliotecas
