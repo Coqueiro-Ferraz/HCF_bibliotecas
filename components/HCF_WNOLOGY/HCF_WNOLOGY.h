@@ -25,12 +25,6 @@ void iniciar_wnology_wifi(const char *ssid, const char *pass, const char *device
 // Definição dos tópicos de publicação e subscrição
 void mqtt_wegnology_set_topics(const char *publish_topic, const char *subscribe_topic);
 
-// Publicação de dados em JSON (apenas passa o conteúdo do corpo)
-//void mqtt_wegnology_publish(const char *message_key, const char *message_value);
-
-//void mqtt_wegnology_auto_configure(const char *device_id, const char *user_name, const char *access_token);
-//void mqtt_wegnology_start(const char *ssid, const char *pass, const char *uri);
-
 //Envio de atributo em formato float
 void mqtt_wegnology_send_float(const char *key, float value);
 
@@ -43,5 +37,10 @@ mqtt_wegnology_status_t mqtt_wegnology_publish(const char *key, const char *valu
 // Callback customizado para processar dados recebidos via subscrição
 void mqtt_wegnology_register_callback(void (*on_message)(const char *key, const char *value));
 void wegnology_register_key_handler(const char *key, wegnology_value_handler_t handler);
+
+
+void buffer_add(float temp, float umidade);
+void enviar_buffer();
+void check_wifi_reconnection();
 
 #endif

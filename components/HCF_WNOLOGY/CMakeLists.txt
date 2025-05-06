@@ -5,6 +5,8 @@ idf_component_register(SRCS "HCF_WNOLOGY.c"
                     REQUIRES json
                     REQUIRES nvs_flash                  
                     REQUIRES mqtt
+                    REQUIRES HCF_SOFT
+                    REQUIRES HCF_DHT
                     )
 set(EXTRA_COMPONENT_DIRS $ENV{IDF_PATH}/examples/common_components/protocol_examples_common
     )

@@ -2,11 +2,9 @@
 
 
 #include "HCF_WNOLOGY.h"
-//#include <stdio.h>
 #include "HCF_WIFI.h"
 #include "esp_log.h"
 #include "cJSON.h"
-//#include "esp_wifi.h"
 #include "nvs_flash.h"
 #include <time.h>
 #include "esp_sntp.h"
@@ -19,6 +17,8 @@
 #include "esp_sntp.h"
 #include "time.h"
 #include "sys/time.h"
+#include "esp_timer.h"
+#include "esp_wifi.h"
 
 /*
 Exemplo de configuração
@@ -33,8 +33,32 @@ Exemplo de configuração
 */
 
 
-#define MQTT_URI "mqtt://broker.app.wnology.io:1883"
+// HCF_WNOLOGY.c - biblioteca para integração com Wegnology via MQTT
+
+
+
+#define MAX_BUFFER_ENTRIES 100
+#define RECONNECT_INTERVAL_SECONDS 3600 // 1 hora
+
 static const char *TAG = "HCF_WNOLOGY";
+
+// Buffer circular de dados
+typedef struct {
+    char timestamp[30];
+    float temperatura;
+    float umidade;
+} sensor_data_t;
+
+static sensor_data_t data_buffer[MAX_BUFFER_ENTRIES];
+static int buffer_index = 0;
+
+// Controle de reconexão Wi-Fi
+static time_t last_activity = 0;
+
+static const char* SSID;
+static const char* PASS;
+
+#define MQTT_URI "mqtt://broker.app.wnology.io:1883"
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 static char dev_id[64];
@@ -54,19 +78,11 @@ typedef struct {
     float value;
 } mqtt_message_t;
 
-//callback interno
-
-/*typedef void (*wegnology_value_handler_t)(const char *value);
-
-typedef struct {
-    const char *key;
-    wegnology_value_handler_t handler;
-} wegnology_handler_entry_t;*/
-
 #define MAX_HANDLERS 10
 static wegnology_handler_entry_t handler_table[MAX_HANDLERS];
 static int handler_count = 0;
 
+//Esta função serve para registrar um atributo rotulado para subscrição
 void wegnology_register_key_handler(const char *key, wegnology_value_handler_t handler) {
     if (handler_count < MAX_HANDLERS) {
         handler_table[handler_count].key = key;
@@ -75,6 +91,7 @@ void wegnology_register_key_handler(const char *key, wegnology_value_handler_t h
     }
 }
 
+//Esta função serve para um callback interno
 static void internal_callback(const char *key, const char *value) {
     for (int i = 0; i < handler_count; i++) {
         if (strcmp(handler_table[i].key, key) == 0) {
@@ -84,9 +101,6 @@ static void internal_callback(const char *key, const char *value) {
     }
     ESP_LOGW("WNOLOGY", "Chave não reconhecida: %s", key);
 }
-
-
-
 
 
 // Callback do evento MQTT
@@ -131,14 +145,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-void mqtt_wegnology_auto_configure(const char *device_id, const char *user_name, const char *access_token) {
-   // dev_id = device_id;
-    snprintf(publish_topic, sizeof(publish_topic), "wnology/%s/state", device_id);
-    snprintf(subscribe_topic, sizeof(subscribe_topic), "wnology/%s/command", device_id);
-    snprintf(mqtt_username, sizeof(mqtt_username), "%s", user_name);
-    snprintf(mqtt_password, sizeof(mqtt_password), "%s", access_token);
-}
-
+//Tarefa de publicação periódica do que estiver na fila
 static void mqtt_publish_task(void *param) {
     mqtt_message_t msg;
     while (1) {
@@ -168,6 +175,7 @@ static void mqtt_publish_task(void *param) {
     }
 }
 
+//Inicialização do NTP
 void ntp_init(void)
 {
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
@@ -195,9 +203,22 @@ void ntp_init(void)
     ESP_LOGI("NTP", "Tempo sincronizado (Brasília): %s", asctime(&timeinfo));
 }
  
+// Tarefa de reconexão automática do broker
+void mqtt_connection_watchdog(void *param) {
+    while (true) {
+        if (!mqtt_connected) {
+            ESP_LOGW(TAG, "MQTT desconectado! Tentando reconectar...");
+            esp_mqtt_client_reconnect(mqtt_client); // já tenta reconectar se possível
+        }
+        vTaskDelay(pdMS_TO_TICKS(10000)); // checa a cada 10 segundos
+    }
+}
+
 // Inicializa Wi-Fi e MQTT
 void iniciar_wnology_wifi(const char *ssid, const char *pass, const char *device_id, const char *user_name, const char *access_token) {
 
+    SSID = ssid;
+    PASS = pass;
     nvs_flash_init();
     //tcpip_adapter_init();
     wifi_init();
@@ -226,9 +247,12 @@ void iniciar_wnology_wifi(const char *ssid, const char *pass, const char *device
     xTaskCreate(mqtt_publish_task, "mqtt_pub_task", 4096, NULL, 5, NULL);
 
     mqtt_wegnology_register_callback(internal_callback);
+    xTaskCreate(mqtt_connection_watchdog, "mqtt_connection_watchdog", 4096, NULL, 5, NULL);
+
+  //  xTaskCreate(periodic_reconnect_task, "periodic_reconnect_task", 4096, NULL, 5, NULL);
 }
 
-
+//Envio de atributo numérico
 void mqtt_wegnology_send_float(const char *key, float value){
     mqtt_message_t msg;
     snprintf(msg.key, sizeof(msg.key), "%s", key);
@@ -236,6 +260,7 @@ void mqtt_wegnology_send_float(const char *key, float value){
     xQueueSend(mqtt_msg_queue, &msg, portMAX_DELAY);
 }
 
+//Para o MQTT
 void mqtt_wegnology_stop() {
     if (mqtt_client) {
         esp_mqtt_client_stop(mqtt_client);
@@ -244,6 +269,7 @@ void mqtt_wegnology_stop() {
     }
 }
 
+//Configura dos tópicos de subscrição e publicação
 void mqtt_wegnology_set_topics(const char *pub, const char *sub) {
     strncpy(publish_topic, pub, sizeof(publish_topic));
     strncpy(subscribe_topic, sub, sizeof(subscribe_topic));
@@ -271,42 +297,7 @@ mqtt_wegnology_status_t mqtt_wegnology_publish(const char *key, const char *valu
     return status;
 }
 
-// Publica múltiplos pares chave/valor + timestamp opcional
-/*mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const char **values, int count, int include_timestamp) {
-    if (!mqtt_client || !keys || !values || count <= 0) return MQTT_WEGNOLOGY_ERROR_NULL;
-    if (!mqtt_connected) return MQTT_WEGNOLOGY_ERROR_NOT_CONNECTED;
 
-    cJSON *root = cJSON_CreateObject();
-    if (!root) return MQTT_WEGNOLOGY_ERROR_JSON;
-
-    for (int i = 0; i < count; i++) {
-        cJSON_AddStringToObject(root, keys[i], values[i]);
-    }
-
-    if (include_timestamp) {
-        time_t now;
-        time(&now);
-        struct tm timeinfo;
-        localtime_r(&now, &timeinfo);
-
-        char timestamp[30];
-        strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
-
-        cJSON_AddStringToObject(root, "time", timestamp);
-        //cJSON_AddNumberToObject(root, "timestamp", (double)now);
-    }
-
-    char *json_str = cJSON_PrintUnformatted(root);
-    mqtt_wegnology_status_t status = MQTT_WEGNOLOGY_OK;
-
-    if (esp_mqtt_client_publish(mqtt_client, publish_topic, json_str, 0, 1, 0) < 0) {
-        status = MQTT_WEGNOLOGY_ERROR_JSON;
-    }
-
-    free(json_str);
-    cJSON_Delete(root);
-    return status;
-}*/
 
 // Publica múltiplos pares chave/valor + timestamp
 mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const char **values, int count, int include_timestamp) {
@@ -347,131 +338,135 @@ mqtt_wegnology_status_t mqtt_wegnology_publish_json(const char **keys, const cha
     return status;
 }
 
+//Registro do callback
 void mqtt_wegnology_register_callback(void (*callback)(const char *key, const char *value)) {
     user_callback = callback;
 }
 
 
-const char *strLED = "LED\":"; 
-const char *subtopico_temp = "{\"data\": {\"Temperatura\": ";
+//Atualiza a conexão
+void mqtt_wegnology_set_connected(bool connected) {
+    mqtt_connected = connected;
+    time(&last_activity); // Atualiza último evento de atividade
+}
 
-/*void mensagem(esp_mqtt_client_handle_t cliente) 
-{
-   if(strstr(Inform, strLED)) // aqui estou perguntando se o que foi publicado no tópico command está relacionado a minha TAG LED
-   {//caso afirmativo
+//Adciona ao buffer de publicação em batelada
+void buffer_add(float temp, float umidade) {
+    if (buffer_index >= MAX_BUFFER_ENTRIES) return;
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    strftime(data_buffer[buffer_index].timestamp, sizeof(data_buffer[buffer_index].timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+    data_buffer[buffer_index].temperatura = temp;
+    data_buffer[buffer_index].umidade = umidade;
+    buffer_index++;
+}
+
+//Publica o buffer de batelada
+void enviar_buffer() {
+if (!mqtt_connected || buffer_index == 0) return;
+
+    for (int i = 0; i < buffer_index; i++) {
+        cJSON *root = cJSON_CreateObject();
+        cJSON *data = cJSON_CreateObject();
+
+        cJSON_AddNumberToObject(data, "Temperatura", data_buffer[i].temperatura);
+        cJSON_AddNumberToObject(data, "Umidade", data_buffer[i].umidade);
         
-       if(strstr(Inform, "true")) // aqui pergunto se a TAG LED recebeu o valor "true"
-       {//se "LED":"true"
-           ledstatus = 1;//inverte LED embarcado
-            if(ledstatus==1)//se o LED embarcado está ligado
-            {
-                printf("LED ligado\n");
-                // publico no tópico state {"data":{"est_esp":"link da imagem"}}
-                esp_mqtt_client_publish(cliente, W_TOPICO_PUBLICAR, 
-               // "{\"data\": {\"est_esp\": \"https://files.wnology.io/65774aa82623fd911ab650c1/imagens/esp%20led.png\" }}", 0, 0, 0);
-                "{\"data\": {\"est_esp\": \"https://files.wnology.io/65774aa72623fd911ab650bf/imagens/esp%20led.png\" }}", 0, 0, 0);
-            }
-            else
-            {
-                printf("LED desligado\n");
-                esp_mqtt_client_publish(cliente, W_TOPICO_PUBLICAR, 
-                //"{\"data\": {\"est_esp\": \"https://files.wnology.io/65774aa82623fd911ab650c1/imagens/esp%20ligado.png\" }}", 0, 0, 0);
-                "{\"data\": {\"est_esp\": \"https://files.wnology.io/65774aa72623fd911ab650bf/imagens/esp%20ligado.png\" }}", 0, 0, 0);
-            }
-       }
-       else
-       {//se "LED":"false"
-         //   temp_val = rand() % 100;  // valor aleatório entre 0 e 100 para simular a temperatura
-         //   sprintf(&mensa[0],"%s %d }}",string_temp,temp_val);//isso tudo aqui é só pra mostrar no console o que estou enviando pro broker
-         //   ESP_LOGI(TAG, "%s", &mensa[0]);//vai aparecer de verde no console: MQTT_EXAMPLE: {"data": {Temperatura": 25 }}
-         //   esp_mqtt_client_publish(cliente, W_TOPICO_PUBLICAR, &mensa[0], 0, 0, 0); // Aqui é onde está fazendo a publicação no broker efetivamente
-        
-       
-       }
-        
-       // gpio_set_level(TEC_SH_LD,ledstatus);//aqui é onde realmente acende ou apaga o LED embarcado
-    
+
+        cJSON_AddItemToObject(root, "data", data);
+        cJSON_AddStringToObject(root, "time", data_buffer[i].timestamp);
+
+
+        char *json_str = cJSON_PrintUnformatted(root);
+        esp_mqtt_client_publish(mqtt_client, publish_topic, json_str, 0, 1, 0);
+
+        free(json_str);
+        cJSON_Delete(root);
+
+        // Aguarda 2 segundos entre cada envio
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }
 
-}*/
+    // Após envio, esvazia o buffer
+    buffer_index = 0;
+    return;
+}
 
-
-/*static void log_error_if_nonzero(const char *message, int error_code)
-{
-    if (error_code != 0) {
-        ESP_LOGE(TAG, "Last error %s: 0x%x", message, error_code);
+//Verifica a conexão wifi
+void check_wifi_reconnection() {
+    time_t now;
+    time(&now);
+    if ((now - last_activity) > RECONNECT_INTERVAL_SECONDS) {
+        ESP_LOGW(TAG, "Reconectando Wi-Fi após inatividade");
+        esp_wifi_disconnect();
+        esp_wifi_connect();
+        time(&last_activity);
     }
-}*/
+}
 
-/*static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
-    esp_mqtt_event_handle_t event = event_data;
-    esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
-    switch ((esp_mqtt_event_id_t)event_id) {
+//Reinicia o temporizador de reconexão
+void on_wifi_event(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
+        time(&last_activity);
+        ESP_LOGI(TAG, "Wi-Fi reconectado, temporizador reiniciado");
+    }
+}
 
-    case MQTT_EVENT_CONNECTED:        
-        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_publish(client, W_TOPICO_PUBLICAR,mensa, 0, 0, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-        ESP_LOGI(TAG, "%s", mensa);       
-        msg_id = esp_mqtt_client_subscribe(client, W_TOPICO_SUBSCREVER, 0);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-        break;
+//Tarefa de reconexão
+void periodic_reconnect_task(void *param) {
+    while (1) {
+        time_t now;
+        time(&now);
 
-    case MQTT_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        break;
-
-    case MQTT_EVENT_SUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        break;
-
-    case MQTT_EVENT_UNSUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-        break;
-
-    case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-        break;
-
-    case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
-        Inform = event->data;
-        mensagem(client); 
-        break;
-
-    case MQTT_EVENT_ERROR:
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-        if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-            log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
-            log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
-            log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
-            ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+        if (difftime(now, last_activity) > RECONNECT_INTERVAL_SECONDS) {
+            ESP_LOGI(TAG, "Reconectando Wi-Fi para envio em lote...");
+            wifi_connect_sta(SSID, PASS, 10000); // reconectar
+            ntp_init(); // re-sincronizar o horário se necessário
+            enviar_buffer(); // envia os dados em lote
+            wifi_disconnect(); // desconecta para economia de energia
+            last_activity = now;
         }
-        break;
-
-    default:
-        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
-        break;
+        vTaskDelay(pdMS_TO_TICKS(10000)); // Verifica a cada 10 segundos
     }
-}*/
+}
 
 
-/*static void mqtt_app_start(void)
-{
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = W_BROKER,
-        .credentials.set_null_client_id = false,  
-        .credentials.client_id = W_DEVICE_ID,
-        .credentials.username = W_ACCESS_KEY,
-        .credentials.authentication.password = W_PASSWORD,
-        
-    };
-    cliente = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(cliente, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(cliente);
-}*/
+//Publica em formato JSON
+mqtt_wegnology_status_t mqtt_wegnology_publish_json_with_data_root(const char **keys, const char **values, int count, int include_timestamp) {
+    if (!mqtt_client || !keys || !values || count <= 0) return MQTT_WEGNOLOGY_ERROR_NULL;
+    if (!mqtt_connected) return MQTT_WEGNOLOGY_ERROR_NOT_CONNECTED;
 
+    cJSON *root = cJSON_CreateObject();
+    cJSON *data = cJSON_CreateObject();
+    if (!root || !data) return MQTT_WEGNOLOGY_ERROR_JSON;
+
+    for (int i = 0; i < count; i++) {
+        cJSON_AddStringToObject(data, keys[i], values[i]);
+    }
+    cJSON_AddItemToObject(root, "data", data);
+
+    if (include_timestamp) {
+        time_t now;
+        time(&now);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+
+        char timestamp[30];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+
+        cJSON_AddStringToObject(root, "time", timestamp);
+    }
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    mqtt_wegnology_status_t status = MQTT_WEGNOLOGY_OK;
+
+    if (esp_mqtt_client_publish(mqtt_client, publish_topic, json_str, 0, 1, 0) < 0) {
+        status = MQTT_WEGNOLOGY_ERROR_JSON;
+    }
+
+    free(json_str);
+    cJSON_Delete(root);
+    return status;
+}
